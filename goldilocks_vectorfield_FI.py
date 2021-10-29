@@ -65,10 +65,10 @@ def generate_cnn_model():
 		keras.layers.Dense(10, activation='softmax', name='dense1')
 		])
 
-	new_learning_rate = 0.0001 
-	opt = tf.optimizers.Adam(new_learning_rate)
-	opt = keras.optimizers.Adam(learning_rate=1e-4)
-	model.compile(optimizer=opt,#optimizer='adam',
+	#new_learning_rate = 0.0001 
+	#opt = tf.optimizers.Adam(new_learning_rate)
+	#opt = keras.optimizers.Adam(learning_rate=1e-4)
+	model.compile(optimizer='adam',
 		loss='sparse_categorical_crossentropy',
       	        metrics=['accuracy'])
 
@@ -152,16 +152,19 @@ def main():
 	os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 	tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 	#command line arguments: 
-	n1 = 30000 #number of examples in the 1st training phase (2n total after full training)
+	n1 = 60000 #number of examples in the 1st training phase (2n total after full training)
 	n2 = 30000 #number of examples in a training phase (2n total after full training)
 	task1_type="digit1" #phase1
 	task2_type="oddeven50" #phase2
 	architecture="add" #same/add/replace - how do we handle ANN's output layers
 
 	#FIXME should be fixed after proper tensorflow output supression
-	if path.exists("goldilocks_vectorfield_logfile.log"):
-		os.remove("goldilocks_vectorfield_logfile.log")
-	logfile  = open("goldilocks_vectorfield_logfile.log", "a", newline='')
+	if path.exists("goldilocks_vectorfield_logfile_long.log"):
+		os.remove("goldilocks_vectorfield_logfile_long.log")
+	logfile  = open("goldilocks_vectorfield_logfile_long.log", "a", newline='')
+	if path.exists("goldilocks_FI_logfile.log"):
+		os.remove("goldilocks_FI_logfile.log")
+	logfile_fi  = open("goldilocks_FI_logfile.log", "a", newline='')
 	twodigit_labels=ten_random_2digits() #FIXME only works for 10 output categories
 	(test_images_1digit, test_labels_1digit) = generate_1digit_set(10000)
 	(test_images_2digit, test_labels_2digit) = generate_2digit_set(10000,twodigit_labels)
@@ -233,72 +236,75 @@ def main():
 	cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
                                                  save_weights_only=True,
                                                  verbose=1)
-	new_learning_rate = 0.0001 
-	opt = tf.optimizers.Adam(new_learning_rate)
-	opt = keras.optimizers.Adam(learning_rate=1e-4)
+	#new_learning_rate = 0.0001 
+	#opt = tf.optimizers.Adam(new_learning_rate)
+	#opt = keras.optimizers.Adam(learning_rate=1e-4)
 
 
 	#create model
-	model = generate_cnn_model()
-	model1 = model
-	model1 = model
-	model1.add(keras.layers.Dense(2, activation='softmax'))
-	model1.add(keras.layers.Dense(2, activation='softmax'))
-	model1.compile(optimizer=opt,#'adam',
-                loss='sparse_categorical_crossentropy',
-                metrics=['accuracy'])
-	print('No pretraining')
-	for j in range (0,24):
-		train_images = goldilocks_phase2_train_images[j*1250:j*1250+1250]
-		train_labels = goldilocks_phase2_train_labels[j*1250:j*1250+1250]
-		model1.fit(train_images, train_labels, epochs=3)#, validation_data=(test_images_2digit, test_labels_2digit), callbacks=[tensorboard_callback])
-		test_loss, test_acc = model1.evaluate(test_images_2digit, test_labels_2digit)
-		logfile.write(str(test_acc))
-		logfile.write('	')
-		print('Training finished on ', j*1250+1250)
-		print('Accuracy: ', test_acc)
-	logfile.write('\n')
 
 
 	model = generate_cnn_model()
 
-	fl=0
+	print("init weights:")
+	model = generate_cnn_model()
+	train_images = goldilocks_phase1_train_images[0:1250]
+	train_labels = goldilocks_phase1_train_labels[0:1250]
+	model.fit(train_images, 
+			train_labels,  
+			epochs=3, callbacks=[cp_callback])
+	weights1=model.layers[0].get_weights()[0]
+
 	#train on 2500 examples of single digit
 	for i in range(0,24):
-		if fl==1:
-			model = generate_cnn_model()
-			model.load_weights(checkpoint_path) 
+		model = generate_cnn_model()
+		model.load_weights(checkpoint_path)
+		weights1=model.layers[0].get_weights()[0] 
 		#model.summary()
-		train_images = goldilocks_phase1_train_images[0:i*1250+1250]
-		train_labels = goldilocks_phase1_train_labels[0:i*1250+1250]
+		train_images = goldilocks_phase1_train_images[i*1250:i*1250+1250]
+		train_labels = goldilocks_phase1_train_labels[i*1250:i*1250+1250]
 		model.fit(train_images, 
 			train_labels,  
 			epochs=3, callbacks=[cp_callback])#,
 			#validation_data=(test_images,test_labels),
 			#callbacks=[cp_callback])
-		fl=1
-		model1 = model
-		model1.add(keras.layers.Dense(2, activation='softmax'))
-		model1.add(keras.layers.Dense(2, activation='softmax'))
-		model1.compile(optimizer=opt,#'adam',
-                loss='sparse_categorical_crossentropy',
-                metrics=['accuracy'])
-		
-		print('Pre-training finished on ', i*1250+1250)
-		for j in range (0,24):
-			train_images = goldilocks_phase2_train_images[j*1250:j*1250+1250]
-			train_labels = goldilocks_phase2_train_labels[j*1250:j*1250+1250]
-			model1.fit(train_images, train_labels, epochs=3)#, validation_data=(test_images_2digit, test_labels_2digit), callbacks=[tensorboard_callback])
-			test_loss, test_acc = model1.evaluate(test_images_2digit, test_labels_2digit)
-			logfile.write(str(test_acc))
-			logfile.write('	')
-			print('Training finished on ', j*1250+1250)
-			print('Accuracy: ', test_acc)
-		logfile.write('\n')
+		weights2=model.layers[0].get_weights()[0]
+		diff=weights2-weights1
+
+		grads_reshape = [v.flatten() for v in diff]
+		grads_pow2 = [pow(v,2) for v in grads_reshape]
+		grads_sum=[sum(a) for a in grads_pow2]
+		grads_fsum=sum(grads_sum)
+		#print(grads_fsum)
+		logfile_fi.write(str(grads_fsum))
+		logfile_fi.write('	')
+		print('FI: ', grads_fsum)
+		logfile_fi.flush()
+		print('Pre-training finished on ', i*2500+2500)
+	#	model1 = model
+	#	model1.add(keras.layers.Dense(2, activation='softmax'))
+	#	model1.add(keras.layers.Dense(2, activation='softmax'))
+	#	model1.compile(optimizer='adam',
+        #        loss='sparse_categorical_crossentropy',
+        #        metrics=['accuracy'])
+	#	
+#
+	#	for j in range (0,24):
+	#		train_images = goldilocks_phase2_train_images[j*1250:j*1250+1250]
+	#		train_labels = goldilocks_phase2_train_labels[j*1250:j*1250+1250]
+	#		model1.fit(train_images, train_labels, epochs=3)#, validation_data=(test_images_2digit, test_labels_2digit), callbacks=[tensorboard_callback])
+	#		test_loss, test_acc = model1.evaluate(test_images_2digit, test_labels_2digit)
+	#		logfile.write(str(test_acc))
+	#		logfile.write('	')
+	#		logfile.flush()
+	#		print('Training finished on ', j*1250+1250)
+	#		print('Accuracy: ', test_acc)
+	#	logfile.write('\n')
 		#model.summary()
 
 
 	logfile.close()
+	fi_logfile.close()
 main()
 
 
